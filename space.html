@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Space Invaders</title>
+    <style>
+        canvas { border: 1px solid black; background: #000; }
+        body { display: flex; flex-direction: column; align-items: center; font-family: Arial, sans-serif; color: white; background: #111; }
+        #leaderboard { margin-top: 20px; }
+        #scores { list-style: none; padding: 0; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="leaderboard">
+        <h2>Leaderboard</h2>
+        <ul id="scores"></ul>
+        <button id="submitScore" disabled>Submit Score to Tron</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const leaderboard = document.getElementById('scores');
+        const submitButton = document.getElementById('submitScore');
+
+        // Game objects
+        const player = { x: 370, y: 550, width: 60, height: 20, speed: 5, dx: 0 };
+        const bullets = [];
+        const aliens = [];
+        const barriers = [];
+        let score = 0;
+        let gameOver = false;
+
+        // Alien setup (5 rows, 11 columns like the original)
+        for (let row = 0; row < 5; row++) {
+            for (let col = 0; col < 11; col++) {
+                aliens.push({ x: 100 + col * 60, y: 50 + row * 50, width: 40, height: 30, alive: true });
+            }
+        }
+
+        // Barriers (4 blocks like the original)
+        for (let i = 0; i < 4; i++) {
+            barriers.push({ x: 150 + i * 200, y: 450, width: 100, height: 40, health: 3 });
+        }
+
+        // Local leaderboard (stub for Tron later)
+        let scores = JSON.parse(localStorage.getItem('spaceInvadersScores')) || [];
+
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') player.dx = -player.speed;
+            if (e.key === 'ArrowRight') player.dx = player.speed;
+            if (e.key === ' ' && !gameOver) shoot();
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') player.dx = 0;
+        });
+
+        function shoot() {
+            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 4, height: 10, speed: 7 });
+        }
+
+        function update() {
+            if (gameOver) return;
+
+            // Move player
+            player.x += player.dx;
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // Move bullets
+            bullets.forEach((bullet, i) => {
+                bullet.y -= bullet.speed;
+                if (bullet.y < 0) bullets.splice(i, 1);
+            });
+
+            // Alien movement (simple left-right with drop)
+            let edgeHit = false;
+            aliens.forEach(alien => {
+                if (alien.alive) {
+                    alien.x += 0.5;
+                    if (alien.x + alien.width > canvas.width || alien.x < 0) edgeHit = true;
+                }
+            });
+            if (edgeHit) {
+                aliens.forEach(alien => {
+                    if (alien.alive) {
+                        alien.x -= 0.5; // Reverse direction
+                        alien.y += 20;  // Drop down
+                        if (alien.y + alien.height > player.y) gameOver = true; // Aliens reach player
+                    }
+                });
+            }
+
+            // Collision detection
+            bullets.forEach((bullet, bi) => {
+                aliens.forEach((alien, ai) => {
+                    if (alien.alive && bullet.x < alien.x + alien.width && bullet.x + bullet.width > alien.x &&
+                        bullet.y < alien.y + alien.height && bullet.y + bullet.height > alien.y) {
+                        alien.alive = false;
+                        bullets.splice(bi, 1);
+                        score += 10;
+                    }
+                });
+                barriers.forEach(barrier => {
+                    if (bullet.x < barrier.x + barrier.width && bullet.x + bullet.width > barrier.x &&
+                        bullet.y < barrier.y + barrier.height && bullet.y + bullet.height > barrier.y) {
+                        bullets.splice(bi, 1);
+                        barrier.health--;
+                    }
+                });
+            });
+
+            // Check win condition
+            if (aliens.every(alien => !alien.alive)) {
+                gameOver = true;
+                endGame();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw player (simple triangle shape like original)
+            ctx.fillStyle = 'lime';
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.width / 2, player.y);
+            ctx.lineTo(player.x, player.y + player.height);
+            ctx.lineTo(player.x + player.width, player.y + player.height);
+            ctx.fill();
+
+            // Draw bullets
+            ctx.fillStyle = 'white';
+            bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height));
+
+            // Draw aliens (blocky, pixelated look)
+            ctx.fillStyle = 'white';
+            aliens.forEach(alien => {
+                if (alien.alive) ctx.fillRect(alien.x, alien.y, alien.width, alien.height);
+            });
+
+            // Draw barriers
+            ctx.fillStyle = 'green';
+            barriers.forEach(barrier => {
+                if (barrier.health > 0) ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+            });
+
+            // Draw score
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 30);
+
+            if (gameOver) {
+                ctx.fillText('Game Over', canvas.width / 2 - 50, canvas.height / 2);
+            }
+        }
+
+        function endGame() {
+            scores.push({ name: 'Player', score, date: new Date().toLocaleDateString() });
+            scores.sort((a, b) => b.score - a.score);
+            scores = scores.slice(0, 5); // Top 5
+            localStorage.setItem('spaceInvadersScores', JSON.stringify(scores));
+            updateLeaderboard();
+            submitButton.disabled = false;
+        }
+
+        function updateLeaderboard() {
+            leaderboard.innerHTML = '';
+            scores.forEach(s => {
+                const li = document.createElement('li');
+                li.textContent = `${s.name}: ${s.score} (${s.date})`;
+                leaderboard.appendChild(li);
+            });
+        }
+
+        submitButton.addEventListener('click', () => {
+            alert('Tron blockchain integration TBD! Score: ' + score);
+        });
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        updateLeaderboard();
+        gameLoop();
+    </script>
+</body>
+</html>
