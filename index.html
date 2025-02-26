@@ -3,187 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <title>Space Invaders</title>
+    <script src="https://cdn.jsdelivr.net/npm/tronweb/dist/TronWeb.js"></script>
     <style>
-        canvas { border: 1px solid black; background: #000; }
-        body { display: flex; flex-direction: column; align-items: center; font-family: Arial, sans-serif; color: white; background: #111; }
-        #leaderboard { margin-top: 20px; }
-        #scores { list-style: none; padding: 0; }
+        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #game-container { position: relative; transform: rotate(90deg); transform-origin: center; }
+        canvas { background: #000; width: 256px; height: 224px; image-rendering: pixelated; }
+        #ui { position: absolute; color: #fff; font-family: Arial; font-size: 16px; }
+        #score { top: -20px; left: 10px; }
+        #lives { top: -20px; right: 10px; }
+        #submitScore { bottom: -40px; left: 50%; transform: translateX(-50%); }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <div id="leaderboard">
-        <h2>Leaderboard</h2>
-        <ul id="scores"></ul>
-        <button id="submitScore" disabled>Submit Score to Tron</button>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="256" height="224"></canvas>
+        <div id="ui">
+            <div id="score">SCORE: 0</div>
+            <div id="lives">LIVES: 3</div>
+            <button id="submitScore" disabled>Submit to Tron</button>
+        </div>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const leaderboard = document.getElementById('scores');
         const submitButton = document.getElementById('submitScore');
+        ctx.imageSmoothingEnabled = false;
 
-        // Game objects
-        const player = { x: 370, y: 550, width: 60, height: 20, speed: 5, dx: 0 };
+        // TronWeb stub (replace address after deployment)
+        let tronWeb, contract;
+        const contractAddress = "YOUR_CONTRACT_ADDRESS_HERE";
+        const contractABI = [/* Paste ABI from previous message */];
+        async function initTronWeb() {
+            if (window.tronWeb && window.tronWeb.defaultAddress) {
+                tronWeb = window.tronWeb;
+                contract = await tronWeb.contract(contractABI, contractAddress);
+                document.getElementById('payBtn')?.addEventListener('click', async () => {
+                    await contract.payToPlay().send({ callValue: tronWeb.toSun(1) });
+                    alert("Paid 1 TRX! Play now.");
+                });
+                submitButton.onclick = async () => {
+                    await contract.submitScore(score, tronWeb.sha3("gameState")).send();
+                    alert("Score submitted: " + score);
+                };
+            }
+        }
+        setTimeout(initTronWeb, 1000);
+
+        // Game state
+        const player = { x: 112, y: 200, width: 16, height: 8, speed: 2, lives: 3 };
         const bullets = [];
         const aliens = [];
-        const barriers = [];
-        let score = 0;
-        let gameOver = false;
+        const bunkers = [];
+        let score = 0, gameOver = false, alienSpeed = 1, alienStep = 0, alienDir = 1;
 
-        // Alien setup (5 rows, 11 columns like the original)
+        // Aliens (5x11 grid)
         for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 11; col++) {
-                aliens.push({ x: 100 + col * 60, y: 50 + row * 50, width: 40, height: 30, alive: true });
+                aliens.push({ x: 16 + col * 16, y: 32 + row * 16, width: 12, height: 8, alive: true, row });
             }
         }
 
-        // Barriers (4 blocks like the original)
+        // Bunkers (4 blocks)
         for (let i = 0; i < 4; i++) {
-            barriers.push({ x: 150 + i * 200, y: 450, width: 100, height: 40, health: 3 });
+            bunkers.push({ x: 40 + i * 56, y: 168, width: 24, height: 16, health: 4 });
         }
 
-        // Local leaderboard (stub for Tron later)
-        let scores = JSON.parse(localStorage.getItem('spaceInvadersScores')) || [];
-
-        // Input handling
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') player.dx = -player.speed;
-            if (e.key === 'ArrowRight') player.dx = player.speed;
-            if (e.key === ' ' && !gameOver) shoot();
-        });
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') player.dx = 0;
-        });
+        // Inputs
+        let keys = {};
+        document.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === ' ' && !gameOver) shoot(); });
+        document.addEventListener('keyup', e => delete keys[e.key]);
 
         function shoot() {
-            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 4, height: 10, speed: 7 });
+            bullets.push({ x: player.x + player.width / 2, y: player.y, width: 2, height: 6, speed: -4, player: true });
         }
 
         function update() {
             if (gameOver) return;
 
-            // Move player
-            player.x += player.dx;
-            if (player.x < 0) player.x = 0;
-            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            // Player movement
+            if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+            if (keys['ArrowRight'] && player.x + player.width < 256) player.x += player.speed;
 
-            // Move bullets
-            bullets.forEach((bullet, i) => {
-                bullet.y -= bullet.speed;
-                if (bullet.y < 0) bullets.splice(i, 1);
+            // Bullets
+            bullets.forEach((b, i) => {
+                b.y += b.speed;
+                if (b.y < 0 || b.y > 224) bullets.splice(i, 1);
             });
 
-            // Alien movement (simple left-right with drop)
-            let edgeHit = false;
-            aliens.forEach(alien => {
-                if (alien.alive) {
-                    alien.x += 0.5;
-                    if (alien.x + alien.width > canvas.width || alien.x < 0) edgeHit = true;
+            // Aliens
+            alienStep++;
+            if (alienStep % 30 === 0) { // Move every 30 frames (~0.5s at 60fps)
+                let edgeHit = aliens.some(a => a.alive && (a.x + alienDir * alienSpeed < 0 || a.x + alienDir * alienSpeed + a.width > 256));
+                if (edgeHit) {
+                    alienDir *= -1;
+                    aliens.forEach(a => { if (a.alive) a.y += 8; });
+                } else {
+                    aliens.forEach(a => { if (a.alive) a.x += alienDir * alienSpeed; });
                 }
-            });
-            if (edgeHit) {
-                aliens.forEach(alien => {
-                    if (alien.alive) {
-                        alien.x -= 0.5; // Reverse direction
-                        alien.y += 20;  // Drop down
-                        if (alien.y + alien.height > player.y) gameOver = true; // Aliens reach player
-                    }
-                });
+                alienSpeed = 1 + (55 - aliens.filter(a => a.alive).length) / 20; // Speed up as aliens die
+                if (Math.random() < 0.02) alienShoot();
             }
 
-            // Collision detection
-            bullets.forEach((bullet, bi) => {
-                aliens.forEach((alien, ai) => {
-                    if (alien.alive && bullet.x < alien.x + alien.width && bullet.x + bullet.width > alien.x &&
-                        bullet.y < alien.y + alien.height && bullet.y + bullet.height > alien.y) {
-                        alien.alive = false;
+            // Collisions
+            bullets.forEach((b, bi) => {
+                aliens.forEach((a, ai) => {
+                    if (a.alive && b.player && b.x < a.x + a.width && b.x + b.width > a.x && b.y < a.y + a.height && b.y + b.height > a.y) {
+                        a.alive = false;
                         bullets.splice(bi, 1);
-                        score += 10;
+                        score += [30, 20, 20, 10, 10][a.row];
                     }
                 });
-                barriers.forEach(barrier => {
-                    if (bullet.x < barrier.x + barrier.width && bullet.x + bullet.width > barrier.x &&
-                        bullet.y < barrier.y + barrier.height && bullet.y + bullet.height > barrier.y) {
+                bunkers.forEach(bu => {
+                    if (b.x < bu.x + bu.width && b.x + b.width > bu.x && b.y < bu.y + bu.height && b.y + b.height > bu.y) {
                         bullets.splice(bi, 1);
-                        barrier.health--;
+                        bu.health--;
                     }
                 });
+                if (!b.player && b.x < player.x + player.width && b.x + b.width > player.x && b.y < player.y + player.height && b.y + b.height > player.y) {
+                    bullets.splice(bi, 1);
+                    player.lives--;
+                    if (player.lives <= 0) gameOver = true;
+                }
             });
 
-            // Check win condition
-            if (aliens.every(alien => !alien.alive)) {
+            if (aliens.every(a => !a.alive) || aliens.some(a => a.alive && a.y + a.height > player.y)) {
                 gameOver = true;
-                endGame();
+                submitButton.disabled = false;
+            }
+        }
+
+        function alienShoot() {
+            let shooters = [];
+            for (let col = 0; col < 11; col++) {
+                let colAliens = aliens.filter(a => a.alive && Math.floor((a.x - 16) / 16) === col);
+                if (colAliens.length) shooters.push(colAliens[colAliens.length - 1]); // Bottom-most alien
+            }
+            if (shooters.length) {
+                let s = shooters[Math.floor(Math.random() * shooters.length)];
+                bullets.push({ x: s.x + s.width / 2, y: s.y + s.height, width: 2, height: 6, speed: 4, player: false });
             }
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 256, 224);
 
-            // Draw player (simple triangle shape like original)
-            ctx.fillStyle = 'lime';
-            ctx.beginPath();
-            ctx.moveTo(player.x + player.width / 2, player.y);
-            ctx.lineTo(player.x, player.y + player.height);
-            ctx.lineTo(player.x + player.width, player.y + player.height);
-            ctx.fill();
+            // Player
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
 
-            // Draw bullets
-            ctx.fillStyle = 'white';
-            bullets.forEach(bullet => ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height));
+            // Bullets
+            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-            // Draw aliens (blocky, pixelated look)
-            ctx.fillStyle = 'white';
-            aliens.forEach(alien => {
-                if (alien.alive) ctx.fillRect(alien.x, alien.y, alien.width, alien.height);
+            // Aliens
+            aliens.forEach(a => {
+                if (a.alive) ctx.fillRect(a.x, a.y, a.width, a.height);
             });
 
-            // Draw barriers
-            ctx.fillStyle = 'green';
-            barriers.forEach(barrier => {
-                if (barrier.health > 0) ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+            // Bunkers
+            bunkers.forEach(b => {
+                if (b.health > 0) ctx.fillRect(b.x, b.y, b.width, b.height * b.health / 4);
             });
 
-            // Draw score
-            ctx.fillStyle = 'white';
-            ctx.font = '20px Arial';
-            ctx.fillText(`Score: ${score}`, 10, 30);
-
-            if (gameOver) {
-                ctx.fillText('Game Over', canvas.width / 2 - 50, canvas.height / 2);
-            }
+            // UI
+            document.getElementById('score').textContent = `SCORE: ${score}`;
+            document.getElementById('lives').textContent = `LIVES: ${player.lives}`;
+            if (gameOver) ctx.fillText('GAME OVER', 80, 112);
         }
-
-        function endGame() {
-            scores.push({ name: 'Player', score, date: new Date().toLocaleDateString() });
-            scores.sort((a, b) => b.score - a.score);
-            scores = scores.slice(0, 5); // Top 5
-            localStorage.setItem('spaceInvadersScores', JSON.stringify(scores));
-            updateLeaderboard();
-            submitButton.disabled = false;
-        }
-
-        function updateLeaderboard() {
-            leaderboard.innerHTML = '';
-            scores.forEach(s => {
-                const li = document.createElement('li');
-                li.textContent = `${s.name}: ${s.score} (${s.date})`;
-                leaderboard.appendChild(li);
-            });
-        }
-
-        submitButton.addEventListener('click', () => {
-            alert('Tron blockchain integration TBD! Score: ' + score);
-        });
 
         function gameLoop() {
             update();
             draw();
             requestAnimationFrame(gameLoop);
         }
-
-        updateLeaderboard();
         gameLoop();
     </script>
 </body>
