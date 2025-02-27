@@ -6,7 +6,7 @@
     <script src="https://cdn.jsdelivr.net/npm/tronweb/dist/TronWeb.js"></script>
     <style>
         body { margin: 0; background: #000; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        canvas { background: #000; border: 1px solid #fff; }
+        canvas { background: #000; border: 1px solid #fff; image-rendering: pixelated; }
         #leaderboard { color: #fff; font-family: Arial; margin-top: 20px; text-align: center; }
         #scores { list-style: none; padding: 0; }
         button { padding: 10px; font-size: 16px; margin-top: 10px; }
@@ -26,6 +26,7 @@
         const leaderboard = document.getElementById('scores');
         const payBtn = document.getElementById('payBtn');
         const submitButton = document.getElementById('submitScore');
+        ctx.imageSmoothingEnabled = false;
 
         // TronWeb setup
         let tronWeb, contract;
@@ -52,22 +53,25 @@
         setTimeout(initTronWeb, 1000);
 
         // Game state
-        const player = { x: 370, y: 550, width: 32, height: 16, speed: 4, lives: 3 };
+        const scale = 2; // Scale original sizes up
+        const player = { x: 400, y: 550, width: 26 * scale, height: 8 * scale, speed: 4, lives: 3 };
         const bullets = [];
         const aliens = [];
         const bunkers = [];
         let score = 0, gameOver = false, alienSpeed = 0.5, alienDir = 1, frameCount = 0;
 
-        // Aliens (5x11)
+        // Aliens (5x11, original sprite sizes scaled)
         for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 11; col++) {
-                aliens.push({ x: 100 + col * 50, y: 50 + row * 40, width: 32, height: 24, alive: true, row });
+                let w = row === 0 ? 16 : row < 3 ? 22 : 24;
+                let h = 16;
+                aliens.push({ x: 150 + col * 40 * scale, y: 50 + row * 30 * scale, width: w * scale, height: h * scale, alive: true, row });
             }
         }
 
-        // Bunkers (4)
+        // Bunkers (4, original size scaled)
         for (let i = 0; i < 4; i++) {
-            bunkers.push({ x: 150 + i * 160, y: 450, width: 64, height: 32, health: 4 });
+            bunkers.push({ x: 150 + i * 160, y: 450, width: 32 * scale, height: 24 * scale, health: 4 });
         }
 
         let scores = JSON.parse(localStorage.getItem('spaceInvadersScores')) || [];
@@ -76,18 +80,18 @@
         document.addEventListener('keyup', e => delete keys[e.key]);
 
         function shoot() {
-            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 4, height: 12, speed: -6, player: true });
+            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 3 * scale, height: 8 * scale, speed: -6, player: true });
         }
 
         function alienShoot() {
             let shooters = [];
             for (let col = 0; col < 11; col++) {
-                let colAliens = aliens.filter(a => a.alive && Math.floor((a.x - 100) / 50) === col);
+                let colAliens = aliens.filter(a => a.alive && Math.floor((a.x - 150) / (40 * scale)) === col);
                 if (colAliens.length) shooters.push(colAliens[colAliens.length - 1]);
             }
             if (shooters.length) {
                 let s = shooters[Math.floor(Math.random() * shooters.length)];
-                bullets.push({ x: s.x + s.width / 2 - 2, y: s.y + s.height, width: 4, height: 12, speed: 4, player: false });
+                bullets.push({ x: s.x + s.width / 2 - 2, y: s.y + s.height, width: 3 * scale, height: 8 * scale, speed: 4, player: false });
             }
         }
 
@@ -103,16 +107,16 @@
                 if (b.y < 0 || b.y > 600) bullets.splice(i, 1);
             });
 
-            if (frameCount % 60 === 0) { // Move aliens every second
+            if (frameCount % 30 === 0) { // Move aliens every ~0.5s
                 let edgeHit = aliens.some(a => a.alive && (a.x + alienDir * alienSpeed < 0 || a.x + alienDir * alienSpeed + a.width > 800));
                 if (edgeHit) {
                     alienDir *= -1;
-                    aliens.forEach(a => { if (a.alive) a.y += 20; });
+                    aliens.forEach(a => { if (a.alive) a.y += 16 * scale; });
                 } else {
                     aliens.forEach(a => { if (a.alive) a.x += alienDir * alienSpeed; });
                 }
                 alienSpeed = 0.5 + (55 - aliens.filter(a => a.alive).length) / 50;
-                if (Math.random() < 0.1) alienShoot();
+                if (Math.random() < 0.05) alienShoot();
             }
 
             bullets.forEach((b, bi) => {
@@ -146,50 +150,58 @@
         function draw() {
             ctx.clearRect(0, 0, 800, 600);
 
-            // Player (triangle shape)
-            ctx.fillStyle = '#0f0';
+            // Player (tank-like shape from freeinvaders.org)
+            ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.moveTo(player.x + player.width / 2, player.y);
             ctx.lineTo(player.x, player.y + player.height);
             ctx.lineTo(player.x + player.width, player.y + player.height);
             ctx.fill();
+            ctx.fillRect(player.x + player.width / 2 - 4, player.y - 8, 8, 8); // Turret
 
             // Bullets
             ctx.fillStyle = '#fff';
-            bullets.forEach(b => {
-                ctx.fillRect(b.x, b.y, b.width, b.height);
-            });
+            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-            // Aliens (simplified sprite-like shape)
+            // Aliens (sprite-like shapes)
             aliens.forEach(a => {
                 if (a.alive) {
                     ctx.fillStyle = '#fff';
-                    ctx.beginPath();
-                    ctx.arc(a.x + a.width / 2, a.y + a.height / 2, a.width / 2, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(a.x + a.width / 4, a.y + a.height / 4, a.width / 4, a.height / 4); // Eye
-                    ctx.fillRect(a.x + a.width / 2, a.y + a.height / 4, a.width / 4, a.height / 4);
+                    if (a.row === 0) { // Top row (small alien)
+                        ctx.fillRect(a.x + 2 * scale, a.y, 12 * scale, 8 * scale);
+                        ctx.fillRect(a.x, a.y + 8 * scale, 16 * scale, 8 * scale);
+                    } else if (a.row < 3) { // Middle rows (squid-like)
+                        ctx.fillRect(a.x + 4 * scale, a.y, 14 * scale, 8 * scale);
+                        ctx.fillRect(a.x + 2 * scale, a.y + 8 * scale, 18 * scale, 8 * scale);
+                        ctx.fillRect(a.x, a.y + 16 * scale, 6 * scale, 8 * scale);
+                        ctx.fillRect(a.x + 16 * scale, a.y + 16 * scale, 6 * scale, 8 * scale);
+                    } else { // Bottom rows (large alien)
+                        ctx.fillRect(a.x + 2 * scale, a.y, 20 * scale, 8 * scale);
+                        ctx.fillRect(a.x, a.y + 8 * scale, 24 * scale, 8 * scale);
+                        ctx.fillRect(a.x + 4 * scale, a.y + 16 * scale, 16 * scale, 8 * scale);
+                    }
                 }
             });
 
-            // Bunkers (sloped shape)
+            // Bunkers (blocky with slope)
             bunkers.forEach(b => {
                 if (b.health > 0) {
-                    ctx.fillStyle = '#0f0';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(b.x, b.y + (4 - b.health) * 6 * scale, b.width, b.health * 6 * scale);
                     ctx.beginPath();
-                    ctx.moveTo(b.x, b.y + b.height);
-                    ctx.lineTo(b.x + b.width / 2, b.y);
-                    ctx.lineTo(b.x + b.width, b.y + b.height);
+                    ctx.moveTo(b.x, b.y + (4 - b.health) * 6 * scale);
+                    ctx.lineTo(b.x + b.width / 2, b.y - 8 * scale + (4 - b.health) * 6 * scale);
+                    ctx.lineTo(b.x + b.width, b.y + (4 - b.health) * 6 * scale);
                     ctx.fill();
                 }
             });
 
-            if (gameOver) {
-                ctx.fillStyle = '#fff';
-                ctx.font = '40px Arial';
-                ctx.fillText('GAME OVER', 300, 300);
-            }
+            // UI
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.fillText(`SCORE: ${score}`, 10, 30);
+            ctx.fillText(`LIVES: ${player.lives}`, 700, 30);
+            if (gameOver) ctx.fillText('GAME OVER', 350, 300);
         }
 
         function endGame() {
