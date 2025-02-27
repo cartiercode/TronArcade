@@ -28,6 +28,7 @@
         const submitButton = document.getElementById('submitScore');
         ctx.imageSmoothingEnabled = false;
 
+        // TronWeb setup
         let tronWeb, contract;
         const contractAddress = "YOUR_CONTRACT_ADDRESS_HERE";
         const contractABI = []; // Add your ABI here
@@ -52,26 +53,91 @@
         setTimeout(initTronWeb, 1000);
 
         const scale = 2;
-        const player = { x: 374, y: 480, width: 52, height: 16, speed: 4, lives: 3 };
+        const player = { x: 374, y: 480, width: 26 * scale, height: 8 * scale, speed: 4, lives: 3 };
         const bullets = [];
         const aliens = [];
         const bunkers = [];
         let score = 0, gameOver = false, alienDir = 1, frameCount = 0, alienFrame = 0;
-        let mysteryShip = null, mysteryTimer = 0;
+        let mysteryShip = null;
 
+        // Alien sprites (full data restored)
         const alienSprites = {
-            0: [[/* Frame 0 and 1 as before */], [/* Frame 0 and 1 as before */]],
-            1: [[/* Frame 0 and 1 as before */], [/* Frame 0 and 1 as before */]],
-            2: [[/* Frame 0 and 1 as before */], [/* Frame 0 and 1 as before */]]
+            0: [
+                [
+                    [0,0,0,1,1,0,0,0],
+                    [0,0,1,1,1,1,0,0],
+                    [0,1,1,1,1,1,1,0],
+                    [1,1,0,1,1,0,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [0,1,0,1,1,0,1,0],
+                    [1,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,0,1,0]
+                ],
+                [
+                    [0,0,0,1,1,0,0,0],
+                    [0,0,1,1,1,1,0,0],
+                    [0,1,1,1,1,1,1,0],
+                    [1,1,0,1,1,0,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [0,1,0,1,1,0,1,0],
+                    [0,0,1,0,0,1,0,0],
+                    [1,0,0,1,1,0,0,1]
+                ]
+            ],
+            1: [
+                [
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [0,0,0,1,0,0,0,1,0,0,0],
+                    [0,0,1,1,1,1,1,1,1,0,0],
+                    [0,1,1,0,1,1,1,0,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,1,1,1,1,1,1,1,0,1],
+                    [1,0,1,0,0,0,0,0,1,0,1],
+                    [0,0,0,1,1,0,1,1,0,0,0]
+                ],
+                [
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [1,0,0,1,0,0,0,1,0,0,1],
+                    [1,0,1,1,1,1,1,1,1,0,1],
+                    [1,1,1,0,1,1,1,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,0],
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [0,1,0,0,0,0,0,0,0,1,0]
+                ]
+            ],
+            2: [
+                [
+                    [0,0,0,0,1,1,1,1,0,0,0,0],
+                    [0,1,1,1,1,1,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,0,1,1,0,0,1,1,0,0,0],
+                    [0,0,1,1,0,1,1,0,1,1,0,0],
+                    [1,1,0,0,0,0,0,0,0,0,1,1]
+                ],
+                [
+                    [0,0,0,0,1,1,1,1,0,0,0,0],
+                    [0,1,1,1,1,1,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,1,1,1,0,0,1,1,1,0,0],
+                    [0,1,1,0,0,1,1,0,0,1,1,0],
+                    [0,0,1,1,0,0,0,0,1,1,0,0]
+                ]
+            ]
         };
 
+        // Aliens setup (tighter spacing)
         for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 11; col++) {
                 let type = row < 1 ? 0 : row < 3 ? 1 : 2;
                 let width = type === 0 ? 8 : type === 1 ? 11 : 12;
                 aliens.push({
-                    x: 176 + col * 36, // Centered, 36px spacing (scaled)
-                    y: 80 + row * 80, // Adjusted for vertical spacing
+                    x: 176 + col * 36, // Centered on 448px game area
+                    y: 80 + row * 32,  // Tighter vertical spacing
                     width: width * scale,
                     height: 8 * scale,
                     alive: true,
@@ -81,8 +147,23 @@
             }
         }
 
+        // Bunkers setup
+        const bunkerSprite = [
+            [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
         for (let i = 0; i < 4; i++) {
-            bunkers.push({ x: 176 + i * 112, y: 300, width: 64, height: 48, health: 4 });
+            bunkers.push({ x: 176 + i * 112, y: 400, width: 32 * scale, height: 24 * scale, health: 4 });
         }
 
         let scores = JSON.parse(localStorage.getItem('spaceInvadersScores')) || [];
@@ -91,21 +172,25 @@
         document.addEventListener('keyup', e => delete keys[e.key]);
 
         function shoot() {
-            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 6, height: 16, speed: -6, player: true });
+            bullets.push({ x: player.x + player.width / 2 - 2, y: player.y, width: 3 * scale, height: 8 * scale, speed: -6, player: true });
         }
 
         function alienShoot() {
-            let shooters = aliens.filter(a => a.alive && Math.random() < 0.02);
-            shooters.forEach(s => bullets.push({ x: s.x + s.width / 2 - 2, y: s.y + s.height, width: 6, height: 16, speed: 4, player: false }));
+            let shooters = [];
+            for (let col = 0; col < 11; col++) {
+                let colAliens = aliens.filter(a => a.alive && Math.floor((a.x - 176) / 36) === col);
+                if (colAliens.length) shooters.push(colAliens[colAliens.length - 1]);
+            }
+            if (shooters.length) {
+                let s = shooters[Math.floor(Math.random() * shooters.length)];
+                bullets.push({ x: s.x + s.width / 2 - 2, y: s.y + s.height, width: 3 * scale, height: 8 * scale, speed: 4, player: false });
+            }
         }
 
         function updateMysteryShip() {
             if (!mysteryShip && Math.random() < 0.002) {
-                mysteryShip = { x: -32, y: 50, width: 32, speed: 2, direction: 1 };
-                if (Math.random() < 0.5) {
-                    mysteryShip.x = 800;
-                    mysteryShip.direction = -1;
-                }
+                mysteryShip = { x: Math.random() < 0.5 ? -32 : 800, y: 50, width: 16 * scale, height: 8 * scale, speed: 2 };
+                mysteryShip.direction = mysteryShip.x < 0 ? 1 : -1;
             }
             if (mysteryShip) {
                 mysteryShip.x += mysteryShip.speed * mysteryShip.direction;
@@ -131,7 +216,7 @@
                 let edgeHit = aliens.some(a => a.alive && (a.x + alienDir * 16 < 0 || a.x + alienDir * 16 + a.width > 800));
                 if (edgeHit) {
                     alienDir *= -1;
-                    aliens.forEach(a => { if (a.alive) a.y += 16; }); // 8*scale
+                    aliens.forEach(a => { if (a.alive) a.y += 8 * scale; });
                 } else {
                     aliens.forEach(a => { if (a.alive) a.x += alienDir * 16; });
                 }
@@ -156,8 +241,7 @@
                     }
                 });
                 if (mysteryShip && b.player && b.x < mysteryShip.x + mysteryShip.width && b.x + b.width > mysteryShip.x && b.y < mysteryShip.y + mysteryShip.height && b.y + b.height > mysteryShip.y) {
-                    let points = [50, 100, 150, 200, 250, 300][frameCount % 6];
-                    score += points;
+                    score += [50, 100, 150, 200, 250, 300][frameCount % 6];
                     mysteryShip = null;
                     bullets.splice(bi, 1);
                 }
@@ -189,23 +273,20 @@
 
             // Aliens
             aliens.forEach(a => {
-                if (a.alive) {
-                    drawAlien(ctx, a.x, a.y, a.type, alienFrame, scale);
-                }
+                if (a.alive) drawAlien(ctx, a.x, a.y, a.type, alienFrame, scale);
             });
 
             // Bunkers
             bunkers.forEach(b => {
-                if (b.health > 0) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(b.x, b.y + (4 - b.health) * 12, b.width, b.health * 12);
-                }
+                if (b.health > 0) drawBunker(ctx, b.x, b.y, b.health);
             });
 
             // Mystery Ship
             if (mysteryShip) {
                 ctx.fillStyle = '#fff';
-                ctx.fillRect(mysteryShip.x, mysteryShip.y, mysteryShip.width, mysteryShip.height);
+                ctx.beginPath();
+                ctx.arc(mysteryShip.x + mysteryShip.width / 2, mysteryShip.y + mysteryShip.height / 2, mysteryShip.width / 2, 0, Math.PI * 2);
+                ctx.fill();
             }
 
             // UI
@@ -222,9 +303,18 @@
             const pixelSize = scale;
             for (let py = 0; py < sprite.length; py++) {
                 for (let px = 0; px < sprite[py].length; px++) {
-                    if (sprite[py][px]) {
-                        ctx.fillRect(x + px * pixelSize, y + py * pixelSize, pixelSize, pixelSize);
-                    }
+                    if (sprite[py][px]) ctx.fillRect(x + px * pixelSize, y + py * pixelSize, pixelSize, pixelSize);
+                }
+            }
+        }
+
+        function drawBunker(ctx, x, y, health) {
+            ctx.fillStyle = '#fff';
+            const pixelSize = scale;
+            const heightSegments = Math.min(health, 4); // Max 4 segments
+            for (let py = 0; py < heightSegments * 6; py++) { // 6 rows per segment
+                for (let px = 0; px < bunkerSprite[py].length; px++) {
+                    if (bunkerSprite[py][px]) ctx.fillRect(x + px * pixelSize, y + py * pixelSize, pixelSize, pixelSize);
                 }
             }
         }
