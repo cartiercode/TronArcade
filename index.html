@@ -28,10 +28,10 @@
         const submitButton = document.getElementById('submitScore');
         ctx.imageSmoothingEnabled = false;
 
-        // TronWeb setup
+        // TronWeb setup (unchanged)
         let tronWeb, contract;
         const contractAddress = "YOUR_CONTRACT_ADDRESS_HERE";
-        const contractABI = [/* Paste ABI from previous message */];
+        const contractABI = []; // Add your ABI here
         async function initTronWeb() {
             if (window.tronWeb && window.tronWeb.defaultAddress) {
                 tronWeb = window.tronWeb;
@@ -53,25 +53,103 @@
         setTimeout(initTronWeb, 1000);
 
         // Game state
-        const scale = 2; // Scale original sizes up
-        const player = { x: 400, y: 550, width: 26 * scale, height: 8 * scale, speed: 4, lives: 3 };
+        const scale = 2;
+        const player = { x: 400, y: 550, width: 32 * scale, height: 16 * scale, speed: 4, lives: 3 };
         const bullets = [];
         const aliens = [];
         const bunkers = [];
-        let score = 0, gameOver = false, alienSpeed = 0.5, alienDir = 1, frameCount = 0;
+        let score = 0, gameOver = false, alienDir = 1, frameCount = 0, alienFrame = 0;
 
-        // Aliens (5x11, original sprite sizes scaled)
+        // Alien sprites
+        const alienSprites = {
+            0: [
+                [
+                    [0,0,0,1,1,0,0,0],
+                    [0,0,1,1,1,1,0,0],
+                    [0,1,1,1,1,1,1,0],
+                    [1,1,0,1,1,0,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [0,1,0,1,1,0,1,0],
+                    [1,0,0,0,0,0,0,1],
+                    [0,1,0,0,0,0,1,0]
+                ],
+                [
+                    [0,0,0,1,1,0,0,0],
+                    [0,0,1,1,1,1,0,0],
+                    [0,1,1,1,1,1,1,0],
+                    [1,1,0,1,1,0,1,1],
+                    [1,1,1,1,1,1,1,1],
+                    [0,1,0,1,1,0,1,0],
+                    [0,0,1,0,0,1,0,0],
+                    [1,0,0,1,1,0,0,1]
+                ]
+            ],
+            1: [
+                [
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [0,0,0,1,0,0,0,1,0,0,0],
+                    [0,0,1,1,1,1,1,1,1,0,0],
+                    [0,1,1,0,1,1,1,0,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,1,1,1,1,1,1,1,0,1],
+                    [1,0,1,0,0,0,0,0,1,0,1],
+                    [0,0,0,1,1,0,1,1,0,0,0]
+                ],
+                [
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [1,0,0,1,0,0,0,1,0,0,1],
+                    [1,0,1,1,1,1,1,1,1,0,1],
+                    [1,1,1,0,1,1,1,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [0,1,1,1,1,1,1,1,1,1,0],
+                    [0,0,1,0,0,0,0,0,1,0,0],
+                    [0,1,0,0,0,0,0,0,0,1,0]
+                ]
+            ],
+            2: [
+                [
+                    [0,0,0,0,1,1,1,1,0,0,0,0],
+                    [0,1,1,1,1,1,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,0,1,1,0,0,1,1,0,0,0],
+                    [0,0,1,1,0,1,1,0,1,1,0,0],
+                    [1,1,0,0,0,0,0,0,0,0,1,1]
+                ],
+                [
+                    [0,0,0,0,1,1,1,1,0,0,0,0],
+                    [0,1,1,1,1,1,1,1,1,1,1,0],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,0,0,1,1,0,0,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1],
+                    [0,0,1,1,1,0,0,1,1,1,0,0],
+                    [0,1,1,0,0,1,1,0,0,1,1,0],
+                    [0,0,1,1,0,0,0,0,1,1,0,0]
+                ]
+            ]
+        };
+
+        // Aliens setup
         for (let row = 0; row < 5; row++) {
             for (let col = 0; col < 11; col++) {
-                let w = row === 0 ? 16 : row < 3 ? 22 : 24;
-                let h = 16;
-                aliens.push({ x: 150 + col * 40 * scale, y: 50 + row * 30 * scale, width: w * scale, height: h * scale, alive: true, row });
+                let type = row < 1 ? 0 : row < 3 ? 1 : 2;
+                let width = type === 0 ? 8 : type === 1 ? 11 : 12;
+                aliens.push({
+                    x: 150 + col * 40 * scale,
+                    y: 50 + row * 30 * scale,
+                    width: width * scale,
+                    height: 8 * scale,
+                    alive: true,
+                    type,
+                    frame: 0
+                });
             }
         }
 
-        // Bunkers (4, original size scaled)
+        // Bunkers
         for (let i = 0; i < 4; i++) {
-            bunkers.push({ x: 150 + i * 160, y: 450, width: 32 * scale, height: 24 * scale, health: 4 });
+            bunkers.push({ x: 150 + i * 160, y: 450, width: 64 * scale, height: 32 * scale, health: 4 });
         }
 
         let scores = JSON.parse(localStorage.getItem('spaceInvadersScores')) || [];
@@ -107,16 +185,18 @@
                 if (b.y < 0 || b.y > 600) bullets.splice(i, 1);
             });
 
-            if (frameCount % 30 === 0) { // Move aliens every ~0.5s
-                let edgeHit = aliens.some(a => a.alive && (a.x + alienDir * alienSpeed < 0 || a.x + alienDir * alienSpeed + a.width > 800));
+            let aliveAliens = aliens.filter(a => a.alive).length;
+            let stepDelay = Math.max(5, 30 - Math.floor((55 - aliveAliens) * 0.45));
+            if (frameCount % stepDelay === 0) {
+                let edgeHit = aliens.some(a => a.alive && (a.x + alienDir * 16 < 0 || a.x + alienDir * 16 + a.width > 800));
                 if (edgeHit) {
                     alienDir *= -1;
-                    aliens.forEach(a => { if (a.alive) a.y += 16 * scale; });
+                    aliens.forEach(a => { if (a.alive) a.y += 8 * scale; });
                 } else {
-                    aliens.forEach(a => { if (a.alive) a.x += alienDir * alienSpeed; });
+                    aliens.forEach(a => { if (a.alive) a.x += alienDir * 16; });
                 }
-                alienSpeed = 0.5 + (55 - aliens.filter(a => a.alive).length) / 50;
-                if (Math.random() < 0.05) alienShoot();
+                alienFrame = 1 - alienFrame;
+                if (Math.random() < 0.02 + (55 - aliveAliens) * 0.001) alienShoot();
             }
 
             bullets.forEach((b, bi) => {
@@ -124,7 +204,7 @@
                     if (a.alive && b.player && b.x < a.x + a.width && b.x + b.width > a.x && b.y < a.y + a.height && b.y + b.height > a.y) {
                         a.alive = false;
                         bullets.splice(bi, 1);
-                        score += [30, 20, 20, 10, 10][a.row];
+                        score += [30, 20, 10][a.type];
                     }
                 });
                 bunkers.forEach(bu => {
@@ -150,49 +230,24 @@
         function draw() {
             ctx.clearRect(0, 0, 800, 600);
 
-            // Player (tank-like shape from freeinvaders.org)
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.moveTo(player.x + player.width / 2, player.y);
-            ctx.lineTo(player.x, player.y + player.height);
-            ctx.lineTo(player.x + player.width, player.y + player.height);
-            ctx.fill();
-            ctx.fillRect(player.x + player.width / 2 - 4, player.y - 8, 8, 8); // Turret
+            // Player
+            drawPlayer(ctx, player.x, player.y, scale);
 
             // Bullets
             ctx.fillStyle = '#fff';
             bullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
 
-            // Aliens (sprite-like shapes)
+            // Aliens
             aliens.forEach(a => {
                 if (a.alive) {
-                    ctx.fillStyle = '#fff';
-                    if (a.row === 0) { // Top row (small alien)
-                        ctx.fillRect(a.x + 2 * scale, a.y, 12 * scale, 8 * scale);
-                        ctx.fillRect(a.x, a.y + 8 * scale, 16 * scale, 8 * scale);
-                    } else if (a.row < 3) { // Middle rows (squid-like)
-                        ctx.fillRect(a.x + 4 * scale, a.y, 14 * scale, 8 * scale);
-                        ctx.fillRect(a.x + 2 * scale, a.y + 8 * scale, 18 * scale, 8 * scale);
-                        ctx.fillRect(a.x, a.y + 16 * scale, 6 * scale, 8 * scale);
-                        ctx.fillRect(a.x + 16 * scale, a.y + 16 * scale, 6 * scale, 8 * scale);
-                    } else { // Bottom rows (large alien)
-                        ctx.fillRect(a.x + 2 * scale, a.y, 20 * scale, 8 * scale);
-                        ctx.fillRect(a.x, a.y + 8 * scale, 24 * scale, 8 * scale);
-                        ctx.fillRect(a.x + 4 * scale, a.y + 16 * scale, 16 * scale, 8 * scale);
-                    }
+                    drawAlien(ctx, a.x, a.y, a.type, alienFrame, scale);
                 }
             });
 
-            // Bunkers (blocky with slope)
+            // Bunkers
             bunkers.forEach(b => {
                 if (b.health > 0) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(b.x, b.y + (4 - b.health) * 6 * scale, b.width, b.health * 6 * scale);
-                    ctx.beginPath();
-                    ctx.moveTo(b.x, b.y + (4 - b.health) * 6 * scale);
-                    ctx.lineTo(b.x + b.width / 2, b.y - 8 * scale + (4 - b.health) * 6 * scale);
-                    ctx.lineTo(b.x + b.width, b.y + (4 - b.health) * 6 * scale);
-                    ctx.fill();
+                    drawBunker(ctx, b.x, b.y, b.width, b.height, b.health);
                 }
             });
 
@@ -202,6 +257,41 @@
             ctx.fillText(`SCORE: ${score}`, 10, 30);
             ctx.fillText(`LIVES: ${player.lives}`, 700, 30);
             if (gameOver) ctx.fillText('GAME OVER', 350, 300);
+        }
+
+        function drawAlien(ctx, x, y, type, frame, scale) {
+            ctx.fillStyle = '#fff';
+            const sprite = alienSprites[type][frame];
+            const pixelSize = scale;
+            for (let py = 0; py < sprite.length; py++) {
+                for (let px = 0; px < sprite[py].length; px++) {
+                    if (sprite[py][px]) {
+                        ctx.fillRect(x + px * pixelSize, y + py * pixelSize, pixelSize, pixelSize);
+                    }
+                }
+            }
+        }
+
+        function drawPlayer(ctx, x, y, scale) {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(x + player.width / 2, y);
+            ctx.lineTo(x, y + player.height);
+            ctx.lineTo(x + player.width, y + player.height);
+            ctx.fill();
+            ctx.fillRect(x + player.width / 2 - 4, y - 8, 8, 8);
+        }
+
+        function drawBunker(ctx, x, y, width, height, health) {
+            const maxHealth = 4;
+            const currentHeight = height * (health / maxHealth);
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(x, y + currentHeight);
+            ctx.lineTo(x + width / 2, y);
+            ctx.lineTo(x + width, y + currentHeight);
+            ctx.lineTo(x, y + currentHeight);
+            ctx.fill();
         }
 
         function endGame() {
